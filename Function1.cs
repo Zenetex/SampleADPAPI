@@ -6,6 +6,7 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 
 using SampleADPAPI.Contracts;
@@ -19,27 +20,33 @@ namespace SampleADPAPI
         [FunctionName("Function1")]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
-            ILogger log)
+            ILogger log, ExecutionContext context)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
+
+            var config = new ConfigurationBuilder()
+                .SetBasePath(context.FunctionAppDirectory)
+                .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
+                .AddEnvironmentVariables()
+                .Build();
 
             log.LogInformation("Starting Test");
             log.LogInformation("Creating Key Vault");
             ADPKeyVault secretVault = new ADPKeyVault(
-                 new Uri("https://globalsecrets.vault.usgovcloudapi.net/"),
-                    "WorkforceNowAPI",
-                    "WorkforceNowAPI-ClientID",
-                    "WorkforceNowAPI-Secret"
+                 new Uri(config["KeyVaultURI"]),
+                    config["CertificateName"],
+                    config["ClientIDName"],
+                    config["ClientSecretName"]
                     );
             log.LogInformation("Creating ADP Service");
             WorkforceNowService adpService = new WorkforceNowService(
                 secretVault,
-                new Uri("https://accounts.adp.com/auth/oauth/v2/token?")
+                new Uri(config["TokenURI"])
                 );
             log.LogInformation("Creating ADP Event Service");
             EventNotificationService eventService = new EventNotificationService(
                 adpService,
-                new Uri("https://api.adp.com/core/v1/event-notification-messages")
+                new Uri(config["EventNotificationURI"])
                 );
             log.LogInformation("Calling Events");
             ADPEventMessage eventMessage = eventService.getEvents();
